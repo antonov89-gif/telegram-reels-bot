@@ -1,21 +1,25 @@
 """
-АГЕНТ 2: Креатор Reels — КРАСИВОЕ ВИДЕО
-Путь 1: Veo 3.1 (если есть биллинг)
-Путь 2: Pollinations Flux (бесплатно, красивые фото) + Pexels + MoviePy
-Генерит реально красивые Reels для фитнеса
+АГЕНТ 2: Креатор Reels — ПРОФЕССИОНАЛЬНОЕ КРАСИВОЕ ВИДЕО 1080x1920
+- Veo 3.1 (если есть биллинг)
+- Mixkit проф сток-видео (БЕСПЛАТНО, без ключа, реально красивое видео 9.7MB)
+- Flux фото (фолбек)
+
+Работает на moviepy 1.0.3
 """
-import time
-import os
-import uuid
-import textwrap
-import json
-import requests
-import urllib.parse
+import time, os, uuid, textwrap, json, requests, urllib.parse, random
 from google import genai
 from config import GEMINI_API_KEY, GEMINI_MODEL_TEXT, GEMINI_MODEL_VIDEO
 
 os.makedirs("generated_videos", exist_ok=True)
 os.makedirs("generated_images", exist_ok=True)
+
+MIXKIT_FITNESS_VIDEOS = {
+    "home": [5056, 3441],
+    "gym": [27019, 21271, 100522],
+    "squats": [232, 21271],
+    "bike": [40249],
+    "all": [5056, 27019, 21271, 232, 40249, 100522, 3441]
+}
 
 class ReelsCreatorAgent:
     def __init__(self):
@@ -24,67 +28,31 @@ class ReelsCreatorAgent:
         self.video_model = GEMINI_MODEL_VIDEO
 
     async def generate_concept(self, analysis: dict, niche: str, style: str) -> dict:
-        prompt = f"""
-Ты — топовый сценарист Reels и SMM для фитнес-ниши 2026.
-
-Ниша: {niche}
-Стиль: {style}
-Анализ: {analysis}
-
-Создай вирусный Reels 7-8 секунд для девушек 18-35.
-
-Верни СТРОГО JSON:
-{{
-  "title": "короткое название",
-  "hook": "ХВАТИТ ДЕЛАТЬ ЭТО | 3-4 слова КРУПНО",
-  "script": "00:00-00:02 хук, 00:02-00:06 польза, 00:06-00:08 CTA подпишись",
-  "veo_prompt": "Vertical 9:16 video, ... детальный промпт на английском для видео",
-  "imagen_prompts": [
-    "Beautiful young fitness girl doing morning stretching in aesthetic bedroom, soft natural light, 9:16 vertical, photorealistic, 8k, clean, motivational",
-    "Close up of flat belly, healthy lifestyle, aesthetic, soft light, vertical 9:16, highly detailed",
-    "Girl drinking green smoothie after workout, aesthetic kitchen, morning light, vertical 9:16, beautiful, photorealistic"
-  ],
-  "negative_prompt": "blurry, low quality, watermark, deformed, ugly, bad anatomy",
-  "caption": "Подпись для Instagram с пользой и CTA: Сохрани и сделай завтра утром 👇 + 5 хештегов",
-  "voiceover_text": "Хочешь плоский живот без скручиваний? Делай это каждое утро 2 минуты. Сохрани!"
-}}
-Только JSON.
-"""
-        response = self.client.models.generate_content(
-            model=self.text_model,
-            contents=prompt
-        )
-        text = response.text.strip().replace("```json", "").replace("```", "").strip()
+        prompt = f"""Ты — сценарист Reels фитнес 2026, ниша {niche}, стиль {style}, анализ {analysis}
+Верни JSON: {{"title":"...", "hook":"УБЕРИ ЖИВОТ В КРОВАТИ", "script":"00:00-00:02 хук", "veo_prompt":"Vertical 9:16 video...", "imagen_prompts":["Beautiful fitness girl...", "Flat belly...", "Girl drinking smoothie..."], "stock_keywords":"home / gym / squats", "negative_prompt":"blurry", "caption":"Подпись с CTA", "voiceover_text":"Хочешь плоский живот? Делай это 2 мин. Сохрани!"}} Только JSON."""
+        response = self.client.models.generate_content(model=self.text_model, contents=prompt)
+        text = response.text.strip().replace("```json","").replace("```","").strip()
         try:
             data = json.loads(text)
-        except Exception as e:
-            print(f"JSON parse error: {e}")
+        except:
             data = {
                 "title": f"Reels про {niche}",
                 "hook": "СТОП! ДЕЛАЕШЬ НЕ ТАК",
-                "script": "00:00-00:03 Хук\n00:03-00:06 Польза\n00:06-00:08 Подпишись",
-                "veo_prompt": f"Vertical 9:16 video, beautiful fitness girl, aesthetic, cinematic, {style}, 8 seconds",
-                "imagen_prompts": [
-                    "Beautiful fitness girl stretching in bed morning light, aesthetic, vertical 9:16, photorealistic, 8k",
-                    "Flat belly healthy woman, aesthetic, soft light, vertical 9:16, beautiful",
-                    "Girl with green smoothie aesthetic kitchen morning, vertical 9:16, photorealistic"
-                ],
-                "negative_prompt": "blurry, low quality, watermark",
-                "caption": f"🔥 {niche} Сохрани чтобы не потерять! 👇\n\n#фитнес #похудение #reels",
-                "voiceover_text": f"Хочешь результат в {niche}? Делай вот так. Сохрани!",
+                "script": "00:00-00:03 Хук",
+                "veo_prompt": f"Vertical 9:16 video, beautiful fitness girl, {style}, 8 seconds",
+                "imagen_prompts": ["Beautiful fitness girl stretching at home morning aesthetic vertical 9:16 photorealistic 8k", "Flat belly healthy woman aesthetic soft light vertical", "Girl with green smoothie aesthetic kitchen morning vertical"],
+                "stock_keywords": "home",
+                "negative_prompt": "blurry",
+                "caption": f"🔥 {niche} Сохрани!",
+                "voiceover_text": f"Хочешь результат в {niche}? Делай так!",
             }
         return data
 
     async def try_veo_generation(self, veo_prompt: str, negative_prompt: str) -> dict:
         video_id = str(uuid.uuid4())[:8]
         output_path = f"generated_videos/reel_veo_{video_id}.mp4"
-        print(f"[Veo] Пробую {self.video_model}")
         try:
-            operation = self.client.models.generate_videos(
-                model=self.video_model,
-                prompt=veo_prompt,
-                config={"aspect_ratio": "9:16", "negative_prompt": negative_prompt, "duration_seconds": 8}
-            )
+            operation = self.client.models.generate_videos(model=self.video_model, prompt=veo_prompt, config={"aspect_ratio":"9:16","negative_prompt":negative_prompt,"duration_seconds":8})
             while not operation.done:
                 time.sleep(10)
                 operation = self.client.operations.get(operation)
@@ -93,97 +61,62 @@ class ReelsCreatorAgent:
             generated_video.video.save(output_path)
             return {"success": True, "path": output_path, "method": "veo", "video_id": video_id}
         except Exception as e:
-            print(f"[Veo] Недоступен: {e}")
             return {"success": False, "error": str(e), "method": "veo"}
 
-    async def generate_images_beautiful(self, imagen_prompts: list, video_id: str) -> list:
-        """Генерит КРАСИВЫЕ картинки через Pollinations Flux (бесплатно, без ключа) + fallback"""
-        image_paths = []
-        print(f"[Beautiful] Генерю {len(imagen_prompts)} красивых кадра через Pollinations Flux...")
-
-        for i, prompt in enumerate(imagen_prompts[:3]):
-            # Улучшаем промпт для красоты
-            beautiful_prompt = f"{prompt}, beautiful fitness influencer, aesthetic, soft natural light, photorealistic, ultra detailed, 8k, professional photography, clean background, vertical 9:16"
-            # Для Pollinations добавляем стиль
-            final_prompt = f"{beautiful_prompt}, instagram aesthetic, motivational fitness"
-
-            img_path = f"generated_images/{video_id}_{i}_beautiful.jpg"
-            
-            # Попытка 1: Pollinations Flux (бесплатно, без API ключа)
+    async def download_mixkit_video(self, keywords: str, video_id: str) -> str:
+        niche_lower = (keywords or "").lower()
+        if "дом" in niche_lower or "home" in niche_lower or "ленив" in niche_lower or "кроват" in niche_lower:
+            candidates = MIXKIT_FITNESS_VIDEOS["home"]
+        elif "зал" in niche_lower or "gym" in niche_lower:
+            candidates = MIXKIT_FITNESS_VIDEOS["gym"]
+        elif "присед" in niche_lower or "squat" in niche_lower:
+            candidates = MIXKIT_FITNESS_VIDEOS["squats"]
+        else:
+            candidates = MIXKIT_FITNESS_VIDEOS["all"]
+        chosen_id = random.choice(candidates)
+        print(f"[Mixkit] Выбрал ID {chosen_id} для '{keywords}'")
+        for res in ["1080","720"]:
+            url = f"https://assets.mixkit.co/videos/{chosen_id}/{chosen_id}-{res}.mp4"
+            local_path = f"generated_videos/mixkit_{chosen_id}_{res}.mp4"
+            if os.path.exists(local_path) and os.path.getsize(local_path) > 100000:
+                return local_path
             try:
-                # Кодируем промпт для URL
-                encoded = urllib.parse.quote(final_prompt)
-                # Pollinations Flux - бесплатно генерит красивые фото
-                url = f"https://image.pollinations.ai/prompt/{encoded}?width=1080&height=1920&nologo=true&model=flux&enhance=true"
-                print(f"[Pollinations] Запрос: {url[:120]}...")
-                r = requests.get(url, timeout=45)
-                if r.status_code == 200 and len(r.content) > 10000:
-                    with open(img_path, 'wb') as f:
-                        f.write(r.content)
-                    print(f"[Pollinations] ✅ Красивый кадр {i}: {img_path} ({len(r.content)} bytes)")
-                else:
-                    raise Exception(f"Bad status {r.status_code} len {len(r.content)}")
+                print(f"[Mixkit] Скачиваю {url}...")
+                r = requests.get(url, headers={"User-Agent":"Mozilla/5.0"}, timeout=45, stream=True)
+                if r.status_code == 200:
+                    with open(local_path,'wb') as f:
+                        for chunk in r.iter_content(8192):
+                            f.write(chunk)
+                    print(f"[Mixkit] ✅ {local_path} {os.path.getsize(local_path)//1024}KB")
+                    return local_path
             except Exception as e:
-                print(f"[Pollinations] Ошибка кадра {i}: {e} -> пробую Imagen через Gemini")
-                # Попытка 2: Imagen через Gemini
-                try:
-                    response = self.client.models.generate_images(
-                        model="imagen-3.0-generate-001",
-                        prompt=beautiful_prompt,
-                    )
-                    if response.generated_images:
-                        img_bytes = response.generated_images[0].image.image_bytes
-                        with open(img_path, "wb") as f:
-                            f.write(img_bytes)
-                        print(f"[Imagen] Кадр {i}: {img_path}")
-                    else:
-                        raise Exception("No images")
-                except Exception as e2:
-                    print(f"[Imagen] Тоже ошибка: {e2} -> делаю красивую Pillow заглушку с градиентом и фото")
-                    # Попытка 3: Красивая Pillow заглушка (но уже эстетичная)
-                    try:
-                        from PIL import Image, ImageDraw, ImageFont
-                        # Создаем эстетичный градиент
-                        img = Image.new('RGB', (1080, 1920), color=(0,0,0))
-                        draw = ImageDraw.Draw(img)
-                        # Красивый фитнес-градиент
-                        colors = [(255, 183, 197), (255, 154, 158), (250, 208, 196), (255, 209, 102)]
-                        base = colors[i % len(colors)]
-                        for y in range(1920):
-                            # Градиент сверху вниз
-                            r = int(base[0] * (1 - y/1920*0.3) + 255 * y/1920*0.3)
-                            g = int(base[1] * (1 - y/1920*0.3) + 255 * y/1920*0.3)
-                            b = int(base[2] * (1 - y/1920*0.3) + 200 * y/1920*0.3)
-                            draw.line([(0, y), (1080, y)], fill=(r, g, b))
-                        # Добавляем белый полупрозрачный бокс для текста
-                        draw.rectangle([50, 750, 1030, 1150], fill=(255, 255, 255, 200), outline=(255,255,255))
-                        # Текст
-                        try:
-                            # Пробуем дефолтный шрифт
-                            font_large = ImageFont.load_default()
-                            # Переносим промпт
-                            wrapped = textwrap.fill(final_prompt[:200], width=35)
-                            draw.text((80, 780), wrapped, fill=(50,50,50), font=font_large)
-                            draw.text((80, 1050), f"FITNESS REELS #{video_id}", fill=(100,100,100), font=font_large)
-                        except:
-                            draw.text((80, 800), final_prompt[:150], fill=(50,50,50))
-                        img.save(img_path, quality=95)
-                        print(f"[Pillow Aesthetic] Заглушка {img_path}")
-                    except Exception as e3:
-                        print(f"[Pillow] Ошибка заглушки: {e3}")
-            
+                print(f"[Mixkit] Ошибка {e}")
+        return None
+
+    async def generate_images_beautiful(self, imagen_prompts: list, video_id: str) -> list:
+        image_paths = []
+        print(f"[Flux] Генерю {len(imagen_prompts)} кадра...")
+        for i, prompt in enumerate(imagen_prompts[:3]):
+            beautiful_prompt = f"{prompt}, beautiful fitness influencer, aesthetic, soft natural light, photorealistic, ultra detailed, 8k, professional photography, vertical 9:16"
+            final_prompt = f"{beautiful_prompt}, instagram aesthetic"
+            img_path = f"generated_images/{video_id}_{i}_beautiful.jpg"
+            try:
+                encoded = urllib.parse.quote(final_prompt)
+                url = f"https://image.pollinations.ai/prompt/{encoded}?width=1080&height=1920&nologo=true&model=flux&enhance=true"
+                r = requests.get(url, timeout=60)
+                if r.status_code==200 and len(r.content)>10000:
+                    with open(img_path,'wb') as f:
+                        f.write(r.content)
+                    print(f"[Flux] ✅ Кадр {i}")
+                else:
+                    raise Exception(f"Bad {r.status_code}")
+            except Exception as e:
+                print(f"[Flux] Ошибка {i}: {e}")
+                from PIL import Image
+                img = Image.new('RGB',(1080,1920),color=(255,183,197))
+                img.save(img_path)
             if os.path.exists(img_path):
                 image_paths.append(img_path)
-
-        # Если ничего не сгенерилось, создаем хотя бы один
-        if not image_paths:
-            print("[Beautiful] Ничего не сгенерилось, создаю аварийную картинку")
-            from PIL import Image, ImageDraw
-            img_path = f"generated_images/{video_id}_emergency.jpg"
-            img = Image.new('RGB', (1080, 1920), color=(255, 183, 197))
-            img.save(img_path)
-            image_paths.append(img_path)
-
         return image_paths
 
     async def generate_voiceover_auto(self, text: str, video_id: str) -> str:
@@ -192,182 +125,129 @@ class ReelsCreatorAgent:
             from gtts import gTTS
             tts = gTTS(text=text, lang='ru', slow=False)
             tts.save(audio_path)
-            print(f"[TTS] Озвучка: {audio_path}")
             return audio_path
         except Exception as e:
-            print(f"[TTS] Ошибка: {e}")
+            print(f"[TTS] {e}")
             return None
 
-    def add_text_with_pillow(self, image_path, hook_text, output_path):
-        """Добавляет красивый текст через Pillow (не через ImageMagick, чтобы не падало)"""
+    async def assemble_professional_reel(self, stock_video_path: str, voice_path: str, concept: dict, video_id: str) -> str:
+        output_path = f"generated_videos/reel_PRO_{video_id}.mp4"
+        print(f"[PRO] Собираю проф Reels из {stock_video_path}...")
         try:
+            from moviepy.editor import VideoFileClip, AudioFileClip, CompositeVideoClip, ImageClip
             from PIL import Image, ImageDraw, ImageFont
-            img = Image.open(image_path).convert("RGB")
-            draw = ImageDraw.Draw(img, "RGBA")
-            
-            # Черный полупрозрачный фон для текста сверху
-            draw.rectangle([0, 0, 1080, 350], fill=(0, 0, 0, 160))
-            # Белый текст
-            # Пытаемся найти шрифт
+
+            clip = VideoFileClip(stock_video_path)
+            if clip.duration > 8:
+                start = max(0, (clip.duration-8)/2)
+                clip = clip.subclip(start, start+8)
+            else:
+                clip = clip.loop(duration=8)
+
+            w,h = clip.size
+            target_ratio = 9/16
+            if w/h > target_ratio:
+                new_w = int(h*target_ratio)
+                x1 = (w-new_w)//2
+                clip = clip.crop(x1=x1, y1=0, x2=x1+new_w, y2=h)
+            clip = clip.resize((1080,1920))
+
+            # Текст оверлей
             try:
-                # Попытка загрузить жирный шрифт если есть
-                font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 90)
-                font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 45)
-            except:
-                font = ImageFont.load_default()
-                font_small = ImageFont.load_default()
+                hook = concept.get("hook","СТОП!")[:35]
+                txt_img = Image.new('RGBA',(1080,1920),(0,0,0,0))
+                draw = ImageDraw.Draw(txt_img)
+                draw.rectangle([0,0,1080,380], fill=(0,0,0,150))
+                try:
+                    font_big = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",90)
+                    font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",45)
+                except:
+                    font_big = ImageFont.load_default()
+                    font_small = ImageFont.load_default()
+                lines = textwrap.wrap(hook.upper(), width=13)
+                y=30
+                for line in lines[:2]:
+                    draw.text((40,y), line, fill=(255,255,255), font=font_big, stroke_width=3, stroke_fill=(0,0,0))
+                    y+=125
+                draw.rectangle([0,1650,1080,1920], fill=(0,0,0,110))
+                draw.text((50,1680),"Сохрани • Сделай завтра • Подпишись", fill=(255,255,255), font=font_small)
+                draw.text((50,1750), concept.get("title","")[:40], fill=(255,255,255), font=font_small)
+                tmp_txt = f"/tmp/pro_text_{video_id}.png"
+                txt_img.save(tmp_txt)
+                txt_clip = ImageClip(tmp_txt).set_duration(clip.duration)
+                final = CompositeVideoClip([clip, txt_clip])
+            except Exception as e:
+                print(f"Text overlay fail {e}")
+                final = clip
 
-            # Хук в 2 строки
-            hook_lines = textwrap.wrap(hook_text.upper(), width=14)
-            y = 40
-            for line in hook_lines[:2]:
-                # Обводка текста
-                x = 50
-                # Тень
-                draw.text((x+3, y+3), line, fill=(0,0,0), font=font)
-                draw.text((x, y), line, fill=(255,255,255), font=font)
-                y += 110
-
-            # Добавляем внизу лейбл "Сохрани"
-            draw.rectangle([0, 1750, 1080, 1920], fill=(0, 0, 0, 120))
-            draw.text((80, 1790), "Сохрани  •  Сделай завтра  •  Подпишись", fill=(255,255,255), font=font_small)
-
-            img.save(output_path, quality=95)
-            return output_path
-        except Exception as e:
-            print(f"[Pillow Text] Ошибка: {e}")
-            import shutil
-            shutil.copy(image_path, output_path)
-            return output_path
-
-    async def assemble_reel_beautiful(self, image_paths: list, voice_path: str, concept: dict, video_id: str) -> str:
-        output_path = f"generated_videos/reel_BEAUTIFUL_{video_id}.mp4"
-        print(f"[Beautiful Assembler] Собираю красивый Reels из {len(image_paths)} кадров...")
-
-        # Сначала добавляем текст на первую картинку через Pillow (красиво)
-        try:
-            first_with_text = f"generated_images/{video_id}_0_text.jpg"
-            self.add_text_with_pillow(image_paths[0], concept.get("hook", "СТОП!"), first_with_text)
-            # Заменяем первую картинку на версию с текстом
-            image_paths[0] = first_with_text
-        except Exception as e:
-            print(f"Text overlay error: {e}")
-
-        # Сборка через MoviePy с Ken Burns и кроссфейдом
-        try:
-            from moviepy.editor import ImageClip, concatenate_videoclips, CompositeVideoClip, AudioFileClip, ColorClip, CompositeVideoClip
-
-            clips = []
-            total_duration = 8
-            per_clip = total_duration / len(image_paths)
-
-            for idx, img_path in enumerate(image_paths):
-                clip = ImageClip(img_path).set_duration(per_clip + 0.5)  # +0.5 для кроссфейда
-                # Ресайз до 1080x1920 с сохранением пропорций
-                clip = clip.resize(height=1920)
-                clip = clip.crop(x_center=clip.w/2, width=1080, height=1920)
-                
-                # Ken Burns - плавный зум
-                def make_zoom(idx):
-                    def zoom(t):
-                        # Легкий зум ин + небольшой сдвиг
-                        scale = 1 + 0.12 * t / per_clip
-                        return scale
-                    return zoom
-                
-                clip = clip.resize(make_zoom(idx))
-                
-                # Кроссфейд между клипами
-                if idx > 0:
-                    clip = clip.crossfadein(0.5)
-                
-                clips.append(clip)
-
-            final = concatenate_videoclips(clips, method="compose", padding=-0.5)
-
-            # Обрезаем до 8 сек ровно
-            if final.duration > 8:
-                final = final.subclip(0, 8)
-
-            # Аудио
             if voice_path and os.path.exists(voice_path):
                 try:
                     audio = AudioFileClip(voice_path)
                     if audio.duration > final.duration:
                         audio = audio.subclip(0, final.duration)
-                    # Громкость голоса
-                    audio = audio.volumex(1.2)
                     final = final.set_audio(audio)
                 except Exception as e:
-                    print(f"Audio error: {e}")
+                    print(f"Audio {e}")
 
-            # Рендерим с высоким качеством
-            final.write_videofile(
-                output_path, 
-                fps=24, 
-                codec='libx264', 
-                audio_codec='aac',
-                bitrate="5000k",
-                threads=4,
-                logger=None,
-                preset='medium'
-            )
-            print(f"[Beautiful] ✅ Готов красивый Reels: {output_path}")
+            final.write_videofile(output_path, fps=24, codec='libx264', audio_codec='aac', bitrate="5000k", threads=4, logger=None, preset='medium')
+            print(f"[PRO] ✅ Готов {output_path} {os.path.getsize(output_path)//1024}KB")
             return output_path
-
         except Exception as e:
-            print(f"[MoviePy] Ошибка: {e}, пробую OpenCV")
-            try:
-                import cv2
-                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-                out = cv2.VideoWriter(output_path, fourcc, 24.0, (1080, 1920))
-                for img_path in image_paths:
-                    img = cv2.imread(img_path)
-                    if img is None:
-                        continue
-                    img = cv2.resize(img, (1080, 1920))
-                    frames_per_image = int((8 * 24) / len(image_paths))
-                    for _ in range(frames_per_image):
-                        out.write(img)
-                out.release()
-                print(f"[OpenCV] Готов: {output_path}")
-                return output_path
-            except Exception as e2:
-                print(f"OpenCV also failed: {e2}")
-                return image_paths[0] if image_paths else None
+            print(f"[PRO] Ошибка {e}")
+            import traceback; traceback.print_exc()
+            return None
+
+    async def assemble_reel_beautiful(self, image_paths: list, voice_path: str, concept: dict, video_id: str) -> str:
+        output_path = f"generated_videos/reel_BEAUTIFUL_{video_id}.mp4"
+        print(f"[Flux] Сборка из {len(image_paths)} фото...")
+        try:
+            from moviepy.editor import ImageClip, concatenate_videoclips, AudioFileClip
+            clips=[]
+            per_clip=8/len(image_paths)
+            for idx,img_path in enumerate(image_paths):
+                clip=ImageClip(img_path).set_duration(per_clip+0.5)
+                clip=clip.resize(height=1920).crop(x_center=clip.w/2, width=1080, height=1920)
+                clip=clip.resize(lambda t: 1+0.1*t/per_clip)
+                if idx>0:
+                    clip=clip.crossfadein(0.5)
+                clips.append(clip)
+            final=concatenate_videoclips(clips, method="compose", padding=-0.5)
+            if final.duration>8:
+                final=final.subclip(0,8)
+            if voice_path and os.path.exists(voice_path):
+                try:
+                    audio=AudioFileClip(voice_path)
+                    if audio.duration>final.duration:
+                        audio=audio.subclip(0,final.duration)
+                    final=final.set_audio(audio)
+                except:
+                    pass
+            final.write_videofile(output_path, fps=24, codec='libx264', audio_codec='aac', threads=4, logger=None)
+            return output_path
+        except Exception as e:
+            print(f"Flux assembler {e}")
+            return None
 
     async def create_full_auto_reel(self, analysis: dict, niche: str, style: str) -> dict:
         video_id = str(uuid.uuid4())[:6]
-        
         concept = await self.generate_concept(analysis, niche, style)
-        
-        # Попытка Veo
-        veo_result = await self.try_veo_generation(concept["veo_prompt"], concept.get("negative_prompt", ""))
+        veo_result = await self.try_veo_generation(concept["veo_prompt"], concept.get("negative_prompt",""))
         if veo_result["success"]:
-            return {"concept": concept, "video": veo_result, "method": "veo"}
-
-        # Красивая генерация через Pollinations
-        print("[BEAUTIFUL MODE] Делаю красивое видео через Flux + MoviePy")
-        image_paths = await self.generate_images_beautiful(concept.get("imagen_prompts", []), video_id)
-        voice_path = await self.generate_voiceover_auto(concept.get("voiceover_text", ""), video_id)
+            return {"concept":concept,"video":veo_result,"method":"veo"}
+        print(f"[PRO MODE] Mixkit для '{concept.get('stock_keywords')}'")
+        stock_path = await self.download_mixkit_video(concept.get("stock_keywords","fitness")+" "+niche, video_id)
+        if stock_path:
+            voice_path = await self.generate_voiceover_auto(concept.get("voiceover_text",""), video_id)
+            pro_video = await self.assemble_professional_reel(stock_path, voice_path, concept, video_id)
+            if pro_video and os.path.exists(pro_video):
+                return {"concept":concept,"video":{"success":True,"path":pro_video,"method":"pro_mixkit_stock","video_id":video_id},"method":"pro_stock"}
+        print("[BEAUTIFUL] Mixkit не сработал, Flux")
+        image_paths = await self.generate_images_beautiful(concept.get("imagen_prompts",[]), video_id)
+        voice_path = await self.generate_voiceover_auto(concept.get("voiceover_text",""), video_id)
         final_video_path = await self.assemble_reel_beautiful(image_paths, voice_path, concept, video_id)
+        return {"concept":concept,"video":{"success":True if final_video_path and os.path.exists(final_video_path) else False,"path":final_video_path,"method":"beautiful_flux","video_id":video_id},"method":"beautiful"}
 
-        return {
-            "concept": concept,
-            "video": {
-                "success": True if final_video_path and os.path.exists(final_video_path) else False,
-                "path": final_video_path,
-                "method": "beautiful_flux_moviepy",
-                "video_id": video_id,
-                "image_paths": image_paths,
-                "voice_path": voice_path
-            },
-            "method": "beautiful"
-        }
-
-    # Совместимость
     async def generate_video(self, veo_prompt: str, negative_prompt: str = "", aspect_ratio: str = "9:16") -> dict:
         return await self.try_veo_generation(veo_prompt, negative_prompt)
-
     async def create_full_reel(self, analysis: dict, niche: str, style: str) -> dict:
         return await self.create_full_auto_reel(analysis, niche, style)
