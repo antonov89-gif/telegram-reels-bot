@@ -1,0 +1,12 @@
+name: Keep Alive
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping bot to keep alive (if webhook)
+        run: |
+          curl -s https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/getMe || echo "Bot check"

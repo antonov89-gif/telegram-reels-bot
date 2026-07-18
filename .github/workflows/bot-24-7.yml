@@ -1,0 +1,37 @@
+name: Telegram Reels Bot 24/7
+
+on:
+  push:
+    branches: [ main ]
+  schedule:
+    # Запускает каждые 5 часов (GitHub Actions лимит 6 часов на ран, так держим 24/7)
+    - cron: '0 */5 * * *'
+  workflow_dispatch:
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350  # 5 часов 50 минут (лимит 6 часов)
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          
+      - name: Run bot (polling 24/7)
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL_TEXT: gemini-3.5-flash
+          DEFAULT_NICHE: фитнес для девушек, похудение, домашние тренировки
+          DEFAULT_STYLE: динамичный, вирусный, вертикальный 9:16
+        run: |
+          echo "🚀 Запускаю бота 24/7 через GitHub Actions"
+          python bot_simple.py
+
