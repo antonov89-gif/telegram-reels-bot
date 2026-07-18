@@ -1,0 +1,11 @@
+.env
+users_db.json
+generated_videos/
+__pycache__/
+*.pyc
+.venv/
+venv/
+session.json
+*.jpg
+*.mp4
+!fallback_*.jpg

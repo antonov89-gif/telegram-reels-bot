@@ -1,0 +1,11 @@
+version: '3.8'
+services:
+  reels-bot:
+    build: .
+    restart: always
+    env_file: .env
+    volumes:
+      - ./generated_videos:/app/generated_videos
+      - ./generated_images:/app/generated_images
+      - ./users_db.json:/app/users_db.json
+    command: python3 bot_simple.py

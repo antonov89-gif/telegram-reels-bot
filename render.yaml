@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: reels-bot-24-7
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot_webhook.py
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL_TEXT
+        value: gemini-3.5-flash
+      - key: DEFAULT_NICHE
+        value: фитнес для девушек, похудение, домашние тренировки
+      - key: DEFAULT_STYLE
+        value: динамичный, вирусный, вертикальный 9:16
+      - key: WEBHOOK_URL
+        sync: false
+    healthCheckPath: /
